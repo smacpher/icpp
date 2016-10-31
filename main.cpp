@@ -45,10 +45,8 @@ bool checkEmpty(string s) {
 
 bool checkExit(string sessionIn) {
     transform(sessionIn.begin(), sessionIn.end(), sessionIn.begin(), ::toupper);
-    if (sessionIn == "EXIT" ||
-        sessionIn == "QUIT" ||
-        sessionIn == "EXIT()" ||
-        sessionIn == "QUIT()") {
+    if (sessionIn == "EXIT" || sessionIn == "EXIT()" ||
+        sessionIn == "QUIT" || sessionIn == "QUIT()") {
         return true;
     } else {
         return false;
@@ -80,19 +78,16 @@ bool isGlobal(string s) {
 string strip(string& str) {
     size_t first = str.find_first_not_of(' ');
     size_t last = str.find_last_not_of(' ');
-
     // Handle empty string case.
     if (first == string::npos) {
         return "";
     }
-
     return str.substr(first, (last - first + 1));
 }
 
 // Build/Teardown Session.
 void initSession(string filename, ofstream& file) {
     const bool file_exists = fileExists(filename);
-
     if (!file_exists) {
         cout << "Initializing session..." << endl;
         ofstream init_file(filename.c_str());
@@ -102,7 +97,6 @@ void initSession(string filename, ofstream& file) {
         }
         cout << "Successfully initialized session." << endl;
     }
-
     file.open(filename.c_str());
 }
 
