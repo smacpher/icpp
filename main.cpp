@@ -1,3 +1,16 @@
+// TODO
+/*
+ * - Handle multiline inputs (functions, paranthesis, etc).
+ * - Only output stdout from newly added code.
+ * - Once memory is allocated, leave it on stack / heap; don't reallocate.
+ * - With the above ^, we could avoid using .session files / eliminate fileio overhead.
+ * - Add indexes to [In]'s and [Out]'s.
+ * - Handle all global cases (as of now, only have headers and namespaces).
+ *
+ *
+ *
+ */
+
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -10,6 +23,12 @@
 #include <string>
 
 using namespace std;
+
+// Colors.
+const string RED_START = "\033[1;31m";
+const string RED_END = "\033[0m";
+const string GREEN_START = "\033[1;36m";
+const string GREEN_END = "\033[0m";
 
 const string STDERR_FILENAME = ".stderr";
 const string STDOUT_FILENAME = ".stdout";
@@ -24,13 +43,15 @@ bool fileExists(const string&);
 bool isGlobal(string);
 int filesize(string);
 ofstream initSession();
-string compile(string, string);
 string exec(string);
 string getUserInput();
 string run(string);
 string strip(string&);
+void compile(string, string);
 void finalizeSession(string);
 void handleKeyboardInterrupt(int);
+void output(string);
+void printFileContents(string);
 void touchFile(string);
 
 // Signal handlers.
@@ -94,7 +115,18 @@ int filesize(string filename) {
 void clearFile(string filename) {
     fstream file;
     file.open(filename.c_str(), fstream::out | fstream::trunc);
-    f.close();
+    file.close();
+}
+
+void printFileContents(string filename) {
+    string line;
+    ifstream file(filename.c_str());
+    if (file.is_open()) {
+        while (! file.eof()) {
+            getline(file, line);
+            cout << line << endl;
+        }
+    }
 }
 
 // TODO: Handle trailing and leading tabs, too.
@@ -153,23 +185,29 @@ string exec(string cmdStr) {
     return result;
 }
 
-string compile(string fileName, string binName) {
+void compile(string fileName, string binName) {
     string cmd;
     cmd = "g++ -o " + binName + " " + fileName + " 2>" + STDERR_FILENAME;
-    return exec(cmd);
+    exec(cmd);
 }
 
 string run(string binName) {
     string cmd;
-    cmd = "./" + binName;
+    cmd = "./" + binName + " 2>" + STDERR_FILENAME;
     return exec(cmd);
 }
 
 string getUserInput() {
     string userInput;
-    cout << REPL_IN;
+    cout << GREEN_START << REPL_IN << GREEN_END;
     getline(cin, userInput);
     return userInput;
+}
+
+void output(string out) {
+    double kbytes = (double) filesize(SESSION_BINARY_NAME) / 1000;
+    cout << RED_START << kbytes << "KB " << REPL_OUT << RED_END
+        << endl << out << endl;
 }
 
 int main() {
@@ -179,8 +217,8 @@ int main() {
     ofstream session;
     ostringstream sessionMain;
     ostringstream sessionGlobal;
-    ostringstream sessionTempMain;
-    ostringstream sessionTempGlobal;
+    ostringstream prevSessionMain;
+    ostringstream prevSessionGlobal;
     string sessionIn;
     string sessionOut;
 
@@ -208,25 +246,60 @@ int main() {
             sessionMain << sessionIn << endl;
         }
 
-        // Store previous session state to fallback on if error is thrown.
-        sessionTempGlobal << sessionGlobal.rdbuf();
-        sessionTempMain << sessionMain.rdbuf();
-
+        // Build session file.
         constructSession(
             SESSION_FILENAME,
             sessionGlobal.str(),
             sessionMain.str()
         );
-        sessionOut = compile(SESSION_FILENAME, SESSION_BINARY_NAME);
-        cout << sessionOut;
-        // Error occurred.
-        if filesize(STDERR_FILENAME > 0) {
-            ;
+
+        // Compile session file.
+        compile(SESSION_FILENAME, SESSION_BINARY_NAME);
+        // Handle compilation error.
+        if (filesize(STDERR_FILENAME) > 0) {
+            // First, clear contents of session.
+            sessionGlobal.str("");
+            sessionGlobal.clear();
+            sessionMain.str("");
+            sessionMain.clear();
+            // Second, revert back to before error.
+            sessionGlobal << prevSessionGlobal.str();
+            sessionMain << prevSessionMain.str();
+            // Third, output error.
+            printFileContents(STDERR_FILENAME);
+            // Lastly, truncate stderr file.
+            clearFile(STDERR_FILENAME);
         }
+
+        // Run session file.
         sessionOut = run(SESSION_BINARY_NAME);
-        cout << "[Out]: " << sessionOut << endl;
+        // Handle runtime error.
+        if (filesize(STDERR_FILENAME) > 0) {
+            // First, clear contents of session.
+            sessionGlobal.str("");
+            sessionGlobal.clear();
+            sessionMain.str("");
+            sessionMain.clear();
+            // Second, revert back to before error.
+            sessionGlobal << prevSessionGlobal.str();
+            sessionMain << prevSessionMain.str();
+            // Third, output error.
+            printFileContents(STDERR_FILENAME);
+            // Lastly, truncate stderr file.
+            clearFile(STDERR_FILENAME);
+        }
+
+        // Output run.
+        output(sessionOut);
+        // Store successful session for next iteration to fall back on.
+        prevSessionGlobal.str("");
+        prevSessionGlobal.clear();
+        prevSessionMain.str("");
+        prevSessionMain.clear();
+        prevSessionGlobal << sessionGlobal.str();
+        prevSessionMain << sessionMain.str();
     }
+    // Clean up.
     finalizeSession(SESSION_FILENAME);
     return 0;
 }
-
