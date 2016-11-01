@@ -11,6 +11,10 @@
 
 using namespace std;
 
+const string STDERR_FILENAME = ".stderr";
+const string STDOUT_FILENAME = ".stdout";
+const string REPL_IN = "[In]: ";
+const string REPL_OUT = "[Out]: ";
 const string SESSION_FILENAME = ".session.cpp";
 const string SESSION_BINARY_NAME = ".session";
 
@@ -18,17 +22,21 @@ bool checkEmpty(string);
 bool checkExit(string);
 bool fileExists(const string&);
 bool isGlobal(string);
+int filesize(string);
 ofstream initSession();
 string compile(string, string);
 string exec(string);
+string getUserInput();
 string run(string);
 string strip(string&);
 void finalizeSession(string);
 void handleKeyboardInterrupt(int);
+void touchFile(string);
 
 // Signal handlers.
 void handleKeyboardInterrupt(int sig) {
     finalizeSession(SESSION_FILENAME);
+    cout << endl;
     exit(sig);
 }
 
@@ -72,6 +80,21 @@ bool isGlobal(string s) {
         return true;
     }
     return false;
+}
+
+void touchFile(string filename) {
+    ofstream file(filename.c_str());
+}
+
+int filesize(string filename) {
+    ifstream in(filename.c_str(), ios::binary | ios::ate);
+    return in.tellg();
+}
+
+void clearFile(string filename) {
+    fstream file;
+    file.open(filename.c_str(), fstream::out | fstream::trunc);
+    f.close();
 }
 
 // TODO: Handle trailing and leading tabs, too.
@@ -132,7 +155,7 @@ string exec(string cmdStr) {
 
 string compile(string fileName, string binName) {
     string cmd;
-    cmd = "g++ -o " + binName + " " + fileName;
+    cmd = "g++ -o " + binName + " " + fileName + " 2>" + STDERR_FILENAME;
     return exec(cmd);
 }
 
@@ -142,6 +165,13 @@ string run(string binName) {
     return exec(cmd);
 }
 
+string getUserInput() {
+    string userInput;
+    cout << REPL_IN;
+    getline(cin, userInput);
+    return userInput;
+}
+
 int main() {
     // Register signals.
     signal(SIGINT, handleKeyboardInterrupt);
@@ -149,40 +179,52 @@ int main() {
     ofstream session;
     ostringstream sessionMain;
     ostringstream sessionGlobal;
+    ostringstream sessionTempMain;
+    ostringstream sessionTempGlobal;
     string sessionIn;
     string sessionOut;
 
+    // Initialize session.
     initSession(SESSION_FILENAME, session);
+    touchFile(STDERR_FILENAME);
 
     while(true) {
-        // Fetch current session.
-        if (session.is_open()) {
-            // Update session.
-            cout << "[In]: ";
-            getline(cin, sessionIn);
-            if (checkExit(sessionIn)) {
-                break;
-            } else if (checkEmpty(sessionIn)) {
-                continue;
-            }
-            if (isGlobal(sessionIn)) {
-                sessionGlobal << sessionIn << endl;
-            } else {
-                sessionMain << sessionIn << endl;
-            }
-            constructSession(
-                SESSION_FILENAME, 
-                sessionGlobal.str(), 
-                sessionMain.str()
-            );
-            sessionOut = compile(SESSION_FILENAME, SESSION_BINARY_NAME);
-            cout << sessionOut;
-            sessionOut = run(SESSION_BINARY_NAME);
-            cout << "[Out]: " << sessionOut << endl;
-        } else {
-            cout << "FAIL" << endl;
+        // Ensure session is open.
+        if (!session.is_open()) {
+            cout << "Session failure." << endl;
             break;
         }
+        // Fetch user input.
+        sessionIn = getUserInput();
+
+        // Handle cases.
+        if (checkExit(sessionIn)) {
+            break;
+        } else if (checkEmpty(sessionIn)) {
+            continue;
+        } else if (isGlobal(sessionIn)) {
+            sessionGlobal << sessionIn << endl;
+        } else {
+            sessionMain << sessionIn << endl;
+        }
+
+        // Store previous session state to fallback on if error is thrown.
+        sessionTempGlobal << sessionGlobal.rdbuf();
+        sessionTempMain << sessionMain.rdbuf();
+
+        constructSession(
+            SESSION_FILENAME,
+            sessionGlobal.str(),
+            sessionMain.str()
+        );
+        sessionOut = compile(SESSION_FILENAME, SESSION_BINARY_NAME);
+        cout << sessionOut;
+        // Error occurred.
+        if filesize(STDERR_FILENAME > 0) {
+            ;
+        }
+        sessionOut = run(SESSION_BINARY_NAME);
+        cout << "[Out]: " << sessionOut << endl;
     }
     finalizeSession(SESSION_FILENAME);
     return 0;
