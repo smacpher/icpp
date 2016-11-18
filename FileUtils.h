@@ -1,3 +1,6 @@
+#ifndef FileUtils_h
+#define FileUtils_h
+
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -14,4 +17,6 @@ class FileUtils {
         static void printFileContents(const string&);
         static void clearFile(const string&);
 };
+
+#endif /* FileUtils_h */
 

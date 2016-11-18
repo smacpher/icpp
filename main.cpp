@@ -155,6 +155,7 @@ void initSession(string filename, ofstream& file) {
     file.open(filename.c_str());
 }
 
+
 void constructSession(string filename, string globalBody, string mainBody) {
     ofstream session(filename, ios::out | ios::trunc);
     session << globalBody << endl;
